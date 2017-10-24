@@ -31,6 +31,7 @@
 #elif defined(ESP32)
 #include "rom/miniz.h"
 #include "rom/spi_flash.h"
+#include "rom/efuse.h"
 #include "soc/uart_reg.h"
 #include "led.h"
 #endif
@@ -490,10 +491,18 @@ void stub_main1(void) {
   SelectSpiFunction();
   SET_PERI_REG_MASK(0x3FF00014, 1); /* Switch to 160 MHz */
 #elif defined(ESP32)
-  esp_rom_spiflash_attach(0 /* ishspi */, 0 /* legacy */);
-  /* Set flash to 40 MHz. Note: clkdiv _should_ be 2, but actual meausrement
-   * shows that with clkdiv = 1 clock is indeed 40 MHz. */
-  esp_rom_spiflash_config_clk(1, 1);
+  uint32_t spiconfig = ets_efuse_get_spiconfig();
+  esp_rom_spiflash_attach(spiconfig, 0 /* legacy */);
+  /* Set flash to highest possible clock speed.
+	 PLL is not running, so APB freq is the crystal frequency
+	 (40MHz in most cases) so set SPI clock divider to 1.
+
+	 Skip this if efuses are set to remap the SPI flash pins,
+	 as dummy clocks also need to be taken into consideration if
+	 this is the case. */
+  if (spiconfig == 0) {
+	esp_rom_spiflash_config_clk(1, 1);
+  }
 #endif
 
   esp_rom_spiflash_config_param(
